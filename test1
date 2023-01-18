@@ -1,0 +1,59 @@
+create
+
+# tests
+
+using System;
+using System.Runtime.InteropServices;
+
+class Program
+{
+    [DllImport("kernel32", SetLastError = true)]
+    static extern IntPtr VirtualAlloc(IntPtr lpAddress, UIntPtr dwSize,
+        uint flAllocationType, uint flProtect);
+
+    [DllImport("kernel32", SetLastError = true)]
+    static extern IntPtr CreateThread(IntPtr lpThreadAttributes,
+        uint dwStackSize, IntPtr lpStartAddress, IntPtr lpParameter,
+        uint dwCreationFlags, out uint lpThreadId);
+
+    [DllImport("kernel32", SetLastError = true)]
+    static extern bool VirtualFree(IntPtr lpAddress, UIntPtr dwSize,
+        uint dwFreeType);
+
+    static void Main(string[] args)
+    {
+        // Assembly code to be loaded and executed dynamically
+        byte[] code = new byte[] {
+            0x55, // push ebp
+            0x89, 0xE5, // mov ebp, esp
+            0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, 0x00000000
+            0x5D, // pop ebp
+            0xC3 // ret
+        };
+
+        // Allocate memory for the code
+        IntPtr codeAddr = VirtualAlloc(IntPtr.Zero, (UIntPtr)code.Length,
+            0x1000, 0x40);
+
+        // Copy the code to the allocated memory
+        Marshal.Copy(code, 0, codeAddr, code.Length);
+
+        // Get the delegate for the code
+        var threadProc = (ThreadProc)Marshal.GetDelegateForFunctionPointer(
+            codeAddr, typeof(ThreadProc));
+
+        // Create a thread to execute the code
+        uint threadId;
+        IntPtr hThread = CreateThread(IntPtr.Zero, 0,
+            Marshal.GetFunctionPointerForDelegate(threadProc),
+            IntPtr.Zero, 0, out threadId);
+
+        // Wait for the thread to finish
+        WaitForSingleObject(hThread, INFINITE);
+
+        // Free the allocated memory
+        VirtualFree(codeAddr, (UIntPtr)code.Length, 0x8000);
+    }
+
+    delegate int ThreadProc(IntPtr lpThreadParameter);
+}
